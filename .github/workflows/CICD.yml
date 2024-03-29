@@ -102,6 +102,9 @@ jobs:
   Deploy_TO_Created_instance:
     needs: [test-and-package, Terraform_creating_vpc_And_Instance]
     runs-on: ubuntu-latest
+    environment:  ${{ github.event.inputs.environment }}
+    env:
+      TF_VAR_aws_region: ${{ vars.AWS_REGION }}
 
     steps:
       - name: Checkout
