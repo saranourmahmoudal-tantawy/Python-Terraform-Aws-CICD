@@ -55,7 +55,6 @@ resource "aws_instance" "EC2" {
   instance_type = var.instance_type
   subnet_id     = aws_subnet.demosubnet1.id
   vpc_security_group_ids = [ aws_security_group.sg.id ]
-  key_name = "test_key"
 
   tags = {
     Name = "Python-App"
