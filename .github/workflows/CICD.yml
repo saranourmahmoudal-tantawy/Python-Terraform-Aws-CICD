@@ -92,6 +92,12 @@ jobs:
         run: | 
             terraform-bin output instance_ip |tr "\"" "\0" >ip
             echo ip=$(cat ip) >> "$GITHUB_OUTPUT" 
+     
+      - name: Print GITHUB_ENV
+        run: echo $GITHUB_ENV
+
+    outputs:
+      output1: ${{ steps.ip_address.outputs.ip }}
 
   Deploy_TO_Created_instance:
     needs: [test-and-package, Terraform_creating_vpc_And_Instance]
