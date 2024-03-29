@@ -1,0 +1,119 @@
+name: Python-Terraform-CICD
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to Development or Production'
+        required: true
+        default: '' # Default value, change as needed
+
+env:
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+
+jobs:
+  test-and-package:
+    runs-on: ubuntu-latest
+    
+    env:
+      PYTHON_VERSION: '3.x'
+      REQUIREMENTS_FILE: 'requirements.txt'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Create virtual environment
+      run: |
+        python -m venv venv
+        source venv/bin/activate
+      
+    - name: Install dependencies
+      run: |
+        pip install -r ${{ env.REQUIREMENTS_FILE }}
+
+    - name: Cache dependencies
+      uses: actions/cache@v2
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+
+    - name: Run tests
+      run: |
+        python -m unittest discover -s my_package/tests -p 'test_*.py'
+        
+    - name: Lint with pylint
+      run: |
+        pip install pylint
+        pylint my_package/main.py
+
+    - name: Build package
+      run: |
+        python setup.py sdist bdist_wheel
+        mkdir artifacts
+        mv dist/* artifacts/
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: my_flask_app_package
+        path: artifacts/
+
+  Terraform_Creating_VPC_And_Instance:
+    needs: test-and-package
+    runs-on: ubuntu-latest
+    environment:  ${{ github.event.inputs.environment }}
+    env:
+      TF_VAR_aws_region: ${{ vars.AWS_REGION }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+       
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v1
+      
+      - name: Terraform Init
+        run: terraform init
+      
+      - name: Terraform Plan
+        run: terraform plan
+      
+      - name: Terraform Apply
+        run: terraform apply --auto-approve
+      
+
+      - id: ip_address
+        run: | 
+            terraform-bin output instance_ip |tr "\"" "\0" >ip
+            echo ip=$(cat ip) >> "$GITHUB_OUTPUT" 
+
+  Deploy_TO_Created_instance:
+    needs: [test-and-package, Terraform_creating_vpc_And_Instance]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh/
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+
+      - name: Deploy to EC2 Instance
+        run: |
+          ssh-keyscan -H ${{ needs.Terraform_Creating_VPC_And_Instance.outputs.output1 }} >> ~/.ssh/known_hosts
+          ssh -o StrictHostKeyChecking=no ec2-user@${{ needs.Terraform_Creating_VPC_And_Instance.outputs.output1 }} "
+            sudo yum update -y;
+            sudo yum install git python3-pip -y;
+            git clone https://github.com/saranourmahmoudal-tantawy/Python-Terraform-Aws-CICD.git;
+            cd Python-Terraform-Aws-CICD;
+            pip3 install -r requirements.txt;
+            python3 my_package/main.py "
